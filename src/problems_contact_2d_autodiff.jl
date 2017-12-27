@@ -19,7 +19,7 @@ xi
     projected master
  
 """
-function project_from_master_to_slave{E<:MortarElements2D}(
+function project_from_master_to_slave_ad{E<:MortarElements2D}(
     slave_element::Element{E}, x1_::DVTI, n1_::DVTI, x2::Vector;
     tol=1.0e-10, max_iterations=20, debug=false)
 
@@ -68,12 +68,12 @@ function project_from_master_to_slave{E<:MortarElements2D}(
 
 end
 
-function project_from_slave_to_master{E<:MortarElements2D}(
-    master_element::Element{E}, x1::Vector, n1::Vector, x2_::DVTI;
+function project_from_slave_to_master_ad{E<:MortarElements2D}(
+    master_element::Element{E}, x1, n1, x2_;
     tol=1.0e-10, max_iterations=20)
 
-    x2(xi2) = vec(get_basis(master_element, [xi2], time))*x2_
-    dx2(xi2) = vec(get_dbasis(master_element, [xi2], time))*x2_
+    x2(xi2) = interpolate(vec(get_basis(master_element, [xi2], time)), x2_)
+    dx2(xi2) = interpolate(vec(get_dbasis(master_element, [xi2], time)), x2_)
     cross2(a, b) = cross([a; 0], [b; 0])[3]
     R(xi2) = cross2(x2(xi2)-x1, n1)
     dR(xi2) = cross2(dx2(xi2), n1)
@@ -179,8 +179,8 @@ function assemble!(problem::Problem{Contact}, time::Float64,
                 x2 = ((Xi+ui for (Xi,ui) in zip(X2,u2))...)
 
                 # calculate segmentation: we care only about endpoints
-                xi1a = project_from_master_to_slave(slave_element, field(x1), field(n1), x2[1])
-                xi1b = project_from_master_to_slave(slave_element, field(x1), field(n1), x2[2])
+                xi1a = project_from_master_to_slave_ad(slave_element, field(x1), field(n1), x2[1])
+                xi1b = project_from_master_to_slave_ad(slave_element, field(x1), field(n1), x2[2])
                 xi1 = clamp.([xi1a; xi1b], -1.0, 1.0)
                 l = 1/2*abs(xi1[2]-xi1[1])
                 isapprox(l, 0.0) && continue # no contribution in this master element
@@ -214,8 +214,8 @@ function assemble!(problem::Problem{Contact}, time::Float64,
                 #distance > props.maximum_distance && continue
 
                 # calculate segmentation: we care only about endpoints
-                xi1a = project_from_master_to_slave(slave_element, field(x1), field(n1), x2[1])
-                xi1b = project_from_master_to_slave(slave_element, field(x1), field(n1), x2[2])
+                xi1a = project_from_master_to_slave_ad(slave_element, field(x1), field(n1), x2[1])
+                xi1b = project_from_master_to_slave_ad(slave_element, field(x1), field(n1), x2[2])
                 xi1 = clamp.([xi1a; xi1b], -1.0, 1.0)
                 l = 1/2*abs(xi1[2]-xi1[1])
                 isapprox(l, 0.0) && continue # no contribution in this master element
@@ -234,15 +234,15 @@ function assemble!(problem::Problem{Contact}, time::Float64,
                     xi = ip.coords[1]
                     xi_s = dot([1/2*(1-xi); 1/2*(1+xi)], xi1)
                     N1 = vec(get_basis(slave_element, xi_s, time))
-                    x_s = N1*x1 # coordinate in gauss point
-                    n_s = N1*n1 # normal direction in gauss point
+                    x_s = interpolate(N1, x1) # coordinate in gauss point
+                    n_s = interpolate(N1, n1) # normal direction in gauss point
                     t_s = Q'*n_s # tangent direction in gauss point
-                    xi_m = project_from_slave_to_master(master_element, x_s, n_s, x2)
+                    xi_m = project_from_slave_to_master_ad(master_element, x_s, n_s, x2)
                     N2 = vec(get_basis(master_element, xi_m, time))
-                    x_m = N2*x2
+                    x_m = interpolate(N2, x2)
                     Phi = Ae*N1
 
-                    la_s = Phi*la1 # traction force in gauss point
+                    la_s = interpolate(Phi, la1) # traction force in gauss point
                     gn = -dot(n_s, x_s - x_m) # normal gap
 
                     fc[:,slave_element_nodes] += w*la_s*N1'

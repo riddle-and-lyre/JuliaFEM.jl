@@ -327,7 +327,7 @@ function solve!(solver::Solver; empty_assemblies_before_solution=true, symmetric
         debug("Using generalized-α time integration, α=$alpha")
         K = (1-alpha)*K
         C1 = (1-alpha)*C1
-        f = (1-alpha)*f + alpha*fint[end-1].data
+        f = (1-alpha)*f + alpha*fint.data[end-1].second
     end
 
     ndofs = solver.ndofs
